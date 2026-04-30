@@ -11,7 +11,7 @@ The goal is to estimate whether SNAP participation affects calorie intake and ot
 ---
 
 ## Project Structure
-
+.
 ├── code/ # Stata do-file
 ├── data/
 │ ├── raw/ # (not included in repo)
@@ -20,7 +20,6 @@ The goal is to estimate whether SNAP participation affects calorie intake and ot
 │ ├── figures/ # graphs
 │ ├── tables/ # regression tables
 │ └── logs/ # log files
-│
 ├── README.md
 
 
