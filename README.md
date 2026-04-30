@@ -12,8 +12,6 @@ The goal is to estimate whether SNAP participation affects calorie intake and ot
 
 ## Project Structure
 
-project/
-│
 ├── code/ # Stata do-file
 ├── data/
 │ ├── raw/ # (not included in repo)
