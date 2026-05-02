@@ -1,94 +1,117 @@
 # SNAP and Household Nutrition (FoodAPS)
 
 ## Author
-Baimat Niiazaliev
+Baimat Niiazaliev — Advanced Econometrics, May 2026
+
+---
 
 ## Overview
-This project analyzes the impact of SNAP (Supplemental Nutrition Assistance Program) participation on household nutrition using FoodAPS data.
-
-The goal is to estimate whether SNAP participation affects calorie intake and other nutritional outcomes.
+This project estimates the causal effect of SNAP (Supplemental Nutrition
+Assistance Program) participation on household calorie intake using the
+USDA FoodAPS Public Use File. The primary outcome is **winsorised
+calories per capita**. Five estimators are compared: OLS, nearest-neighbour
+matching (NN), propensity score matching (PSM), inverse probability
+weighting (IPW), and doubly-robust IPW regression adjustment (IPWRA).
 
 ---
 
 ## Project Structure
-
 ```
-├── code/ # Stata do-file
+project/
+├── code/
+│   └── coding.do          # Full reproducible pipeline
 ├── data/
-│ ├── raw/ # (not included in repo)
-│ └── clean/ # cleaned dataset used for analysis
+│   ├── raw/               # Raw FoodAPS files (NOT included — see Data section)
+│   └── clean/             # Intermediate and analytic datasets
 ├── output/
-│ ├── figures/ # graphs
-│ ├── tables/ # regression tables
-│ └── logs/ # log files
-├── README.md
+│   ├── figures/           # PNG graphs (5 figures)
+│   ├── tables/            # RTF regression tables
+│   └── logs/              # Stata log files
+├── docs/
+│   ├── writeup.tex        # LaTeX source
+│   └── writeup.pdf        # Compiled write-up
+└── README.md
 ```
 
 ---
 
 ## Data
-
-- Data source: FoodAPS (USDA)
-- Raw data is **not included** due to size restrictions
-- Clean dataset is included in `data/clean/`
+- **Source:** [USDA FoodAPS Public Use File](https://www.ers.usda.gov/data-products/foodaps-national-household-food-acquisition-and-purchase-survey/)
+- Raw data is **not included** in this repository due to size and licensing restrictions
+- Place the following files in `data/raw/` before running:
+  - `faps_household_puf.dta`
+  - `faps_fafhnutrient_PUF.dta`
+- Cleaned dataset (`analysis_dataset.dta`) is generated automatically by the pipeline
 
 ---
 
 ## Methods
+| Estimator | Description |
+|-----------|-------------|
+| OLS | Linear regression with full controls and robust SE |
+| NN Matching | 1:1 Mahalanobis nearest-neighbour matching (ATT) |
+| PSM | 1:1 propensity score matching via logit (ATT) |
+| IPW | Inverse probability weighting (ATT) |
+| **IPWRA** | **Doubly-robust IPW regression adjustment (preferred)** |
 
-The analysis uses several econometric approaches:
-
-- Ordinary Least Squares (OLS)
-- Nearest Neighbor Matching (NN)
-- Propensity Score Matching (PSM)
-- Inverse Probability Weighting (IPW)
+Robustness checks include: trimming to common support, caliper matching
+(0.20 × SD of propensity score), and PSM excluding near-degenerate covariates.
+Outcomes are winsorised at the 1st–99th percentile.
 
 ---
 
-## How to Run
-
-1. Download FoodAPS raw data and place in:
-   data/raw/
-
-
-2. Open Stata
-
+## How to Reproduce
+1. Download FoodAPS raw data and place in `data/raw/`
+2. Open Stata 14 or later
 3. Run:
+```stata
 do code/coding.do
+```
+The script automatically creates all subfolders, saves a timestamped log
+file, and writes all figures and tables to `output/`.
 
----
-
-## Outputs
-
-The script generates:
-
-- Regression tables (RTF format)
-- Figures (PNG)
-- Log files
-
-All outputs are stored in the `output/` folder.
+**Required packages** (installed automatically by the script):
+- `winsor2` — `ssc install winsor2`
+- `coefplot` — `ssc install coefplot`
 
 ---
 
 ## Key Findings
+- **Naive OLS** (no controls): +260 kcal, marginally significant — driven
+  by household size confounding, not a programme effect
+- **OLS with full controls**: −1.84 kcal/person, statistically insignificant
+- **NN and PSM**: insignificant, estimates range from −0.21 to +3.35 kcal
+- **IPW**: +4.28 kcal/person (p = 0.038)
+- **IPWRA (doubly-robust, preferred)**: −3.82 kcal/person (p = 0.016,
+  95% CI: [−6.94, −0.70])
 
-- Naive OLS suggests a positive relationship between SNAP and calorie intake
-- After controlling for covariates, the effect becomes insignificant
-- Matching and IPW estimates show no statistically significant effect
-
-This suggests that the OLS estimate is biased due to selection.
+The sign divergence between IPW and IPWRA reveals **model dependence**:
+results are sensitive to whether the outcome regression is included in the
+estimator. IPWRA is preferred because it is consistent if either the
+propensity score model or the outcome regression model is correctly
+specified — not necessarily both. The preferred estimate suggests SNAP
+*maintains* rather than increases per-capita calorie adequacy, with an
+effect size of roughly 5% of the counterfactual mean.
 
 ---
 
-## Reproducibility
-
-The project is fully reproducible:
-- Uses relative paths
-- Automatically generates outputs
-- Organized folder structure
+## Outputs Generated
+| File | Description |
+|------|-------------|
+| `output/figures/fig1_pscore_histogram.png` | Propensity score distribution |
+| `output/figures/fig2_pscore_overlap.png` | Overlap (kernel density) |
+| `output/figures/fig3_coefplot.png` | ATT estimates across all 5 estimators |
+| `output/figures/fig4_pscore_trimmed.png` | Overlap after trimming |
+| `output/figures/fig5_psm_robustness.png` | PSM robustness checks |
+| `output/tables/table_primary.rtf` | Main table: calories per capita |
+| `output/tables/table_secondary.rtf` | Secondary: total calories |
+| `output/tables/table2_psm_robustness.rtf` | PSM robustness table |
+| `output/logs/coding_DDMMMYYYY.log` | Full Stata log |
 
 ---
 
-## Notes
-
-This project was completed as part of an Advanced Econometrics course.
+## AI Use Statement
+Claude (Anthropic) was used for assistance with Stata pipeline structure,
+debugging, and LaTeX formatting. All analytical decisions, variable
+construction, identification strategy, and interpretation of results
+are the author's own.
