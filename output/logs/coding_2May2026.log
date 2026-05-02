@@ -1,0 +1,2035 @@
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\Users\Admin\Desktop\advanced econometrics\project\output\logs\coding_2May2026.log
+  log type:  text
+ opened on:   2 May 2026, 14:33:05
+
+. 
+. di "========================================================"
+========================================================
+
+. di "  Log started: $S_DATE $S_TIME"
+  Log started:  2 May 2026 14:33:05
+
+. di "========================================================"
+========================================================
+
+. 
+. *--------------------------------------------------------------*
+. * 2. Load and subset household data  (RAW — never modified)
+. *--------------------------------------------------------------*
+. 
+. use "data/raw/faps_household_puf.dta", clear
+
+. 
+. keep ///
+>     hhnum         ///
+>     snapnowhh     ///
+>     inchhavg_r    ///
+>     region        ///
+>     rural         ///
+>     hhsize        ///
+>     foodsufficient ///
+>     adltfscat     ///
+>     housingpub    ///
+>     housingsub    ///
+>     liqassets     ///
+>     caraccess     ///
+>     primstoredist_d ///
+>     healthycost   ///
+>     healthytime   ///
+>     dietstatushh
+
+. 
+. * Save cleaned household subset to data/clean/
+. save "data\clean\hh_temp.dta", replace
+file data\clean\hh_temp.dta saved
+
+. di ">> Saved: data\clean\hh_temp.dta"
+>> Saved: data\clean\hh_temp.dta
+
+. 
+. *--------------------------------------------------------------*
+. * 3. Load nutrient data  (RAW)
+. *--------------------------------------------------------------*
+. 
+. use "data/raw/faps_fafhnutrient_PUF.dta", clear
+(ERS-cleaned FAFH nutrient data, FoodAPS)
+
+. 
+. *--------------------------------------------------------------*
+. * 4. Merge household information
+. *--------------------------------------------------------------*
+. 
+. merge m:1 hhnum using "data\clean\hh_temp.dta"
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           521
+        from master                         0  (_merge==1)
+        from using                        521  (_merge==2)
+
+    matched                           116,074  (_merge==3)
+    -----------------------------------------
+
+. 
+. drop if _merge == 2   // households with no nutrient records
+(521 observations deleted)
+
+. drop _merge
+
+. 
+. *--------------------------------------------------------------*
+. * 5. Create nutrition outcome variables
+. *--------------------------------------------------------------*
+. 
+. gen calories    = energy
+(286 missing values generated)
+
+. gen sugar       = totsug
+(288 missing values generated)
+
+. gen sodium_mg   = sodium
+(286 missing values generated)
+
+. gen fat         = totfat
+(286 missing values generated)
+
+. 
+. * Per-capita calories BEFORE collapse
+. gen calories_pc = calories / hhsize
+(286 missing values generated)
+
+. 
+. * Log specification (safe)
+. gen ln_calories = log(calories + 1)
+(286 missing values generated)
+
+. 
+. *--------------------------------------------------------------*
+. * 6. Collapse to household level
+. *--------------------------------------------------------------*
+. 
+. collapse                       ///
+>     (sum)  calories sugar sodium_mg fat  ///
+>     (mean) calories_pc ln_calories       ///
+>     , by(                      ///
+>         hhnum                  ///
+>         snapnowhh              ///
+>         inchhavg_r             ///
+>         region                 ///
+>         rural                  ///
+>         hhsize                 ///
+>         foodsufficient         ///
+>         adltfscat              ///
+>         housingpub             ///
+>         housingsub             ///
+>         liqassets              ///
+>         caraccess              ///
+>         primstoredist_d        ///
+>         healthycost            ///
+>         healthytime            ///
+>         dietstatushh           ///
+>     )
+
+. 
+. *--------------------------------------------------------------*
+. * 7. Clean variables
+. *--------------------------------------------------------------*
+. 
+. drop if snapnowhh < 0
+(2 observations deleted)
+
+. rename inchhavg_r income
+
+. rename sodium_mg  sodium
+
+. drop if income < 0
+(0 observations deleted)
+
+. 
+. *--------------------------------------------------------------*
+. * 7b. Winsorize outcomes at 1st-99th percentile
+. *     Removes extreme outliers (e.g. calories max = 49,278)
+. *     that inflate standard errors without reflecting true
+. *     household consumption.
+. *     Requires: ssc install winsor2
+. *--------------------------------------------------------------*
+. 
+. capture ssc install winsor2, replace
+
+. 
+. winsor2 calories,    cuts(1 99) suffix(_w)
+
+. winsor2 calories_pc, cuts(1 99) suffix(_w)
+
+. winsor2 sugar,       cuts(1 99) suffix(_w)
+
+. winsor2 sodium,      cuts(1 99) suffix(_w)
+
+. 
+. * Show effect of winsorising
+. di "=== Calories: raw vs winsorised ==="
+=== Calories: raw vs winsorised ===
+
+. summ calories
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    calories |      4,303    4746.639    4637.452          0   49278.05
+
+. summ calories_w
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  calories_w |      4,303    4697.041    4399.401         37   20998.12
+
+. 
+. di "=== Calories per capita: raw vs winsorised ==="
+=== Calories per capita: raw vs winsorised ===
+
+. summ calories_pc
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ calories_pc |      4,302     82.3721     60.4106          0   504.3333
+
+. summ calories_pc_w
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+calories_p~w |      4,302    81.94262    58.17738   8.857142      286.5
+
+. 
+. * Save final analytic dataset to data/clean/
+. save "data\clean\analysis_dataset.dta", replace
+file data\clean\analysis_dataset.dta saved
+
+. di ">> Saved: data\clean\analysis_dataset.dta"
+>> Saved: data\clean\analysis_dataset.dta
+
+. 
+. *--------------------------------------------------------------*
+. * 8. Descriptive statistics
+. *--------------------------------------------------------------*
+. 
+. tab snapnowhh
+
+  anyone in |
+  household |
+         is |
+  receiving |
+       snap |
+   benefits |
+      (y/n) |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |      2,961       68.81       68.81
+          1 |      1,342       31.19      100.00
+------------+-----------------------------------
+      Total |      4,303      100.00
+
+. 
+. summ calories sugar sodium if snapnowhh == 1
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    calories |      1,342    4925.808     4967.64          0   49278.05
+       sugar |      1,342    193.9846    230.8317          0   2365.435
+      sodium |      1,342    8603.278    9074.676          2   88637.77
+
+. summ calories sugar sodium if snapnowhh == 0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    calories |      2,961    4665.435    4478.311          0   35240.42
+       sugar |      2,961    167.6406    196.3652          0   2019.607
+      sodium |      2,961    8103.313    7718.273          0   62978.68
+
+. summ calories_pc if snapnowhh == 1
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ calories_pc |      1,342    72.71986    56.79779          0   392.6667
+
+. summ calories_pc if snapnowhh == 0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ calories_pc |      2,960    86.74821    61.49121          0   504.3333
+
+. 
+. *--------------------------------------------------------------*
+. * 9. Baseline OLS
+. *--------------------------------------------------------------*
+. 
+. reg calories snapnowhh
+
+      Source |       SS           df       MS      Number of obs   =     4,303
+-------------+----------------------------------   F(1, 4301)      =      2.91
+       Model |  62605032.2         1  62605032.2   Prob > F        =    0.0880
+    Residual |  9.2456e+10     4,301  21496407.1   R-squared       =    0.0007
+-------------+----------------------------------   Adj R-squared   =    0.0004
+       Total |  9.2519e+10     4,302  21505962.8   Root MSE        =    4636.4
+
+------------------------------------------------------------------------------
+    calories |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+   snapnowhh |   260.3723   152.5714     1.71   0.088    -38.74631     559.491
+       _cons |   4665.435   85.20474    54.76   0.000      4498.39    4832.481
+------------------------------------------------------------------------------
+
+. 
+. reg calories            ///
+>     snapnowhh           ///
+>     income              ///
+>     rural               ///
+>     i.region, robust
+
+Linear regression                               Number of obs     =      4,303
+                                                F(6, 4296)        =      22.46
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.0359
+                                                Root MSE          =     4556.5
+
+------------------------------------------------------------------------------
+             |               Robust
+    calories |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+   snapnowhh |   835.9033   163.6728     5.11   0.000       515.02    1156.787
+      income |   .2258733   .0225015    10.04   0.000     .1817588    .2699879
+       rural |   201.7428   164.4211     1.23   0.220    -120.6075    524.0932
+             |
+      region |
+          2  |   1175.321   214.2392     5.49   0.000     755.3019    1595.341
+          3  |    1156.16   197.8394     5.84   0.000     768.2923    1544.027
+          4  |   605.7027   205.0045     2.95   0.003     203.7881    1007.617
+             |
+       _cons |   2700.197   193.9553    13.92   0.000     2319.945     3080.45
+------------------------------------------------------------------------------
+
+. 
+. *--------------------------------------------------------------*
+. * 10. Main OLS with full controls
+. *--------------------------------------------------------------*
+. 
+. reg calories            ///
+>     snapnowhh           ///
+>     income              ///
+>     rural               ///
+>     i.region            ///
+>     hhsize              ///
+>     foodsufficient      ///
+>     liqassets           ///
+>     caraccess           ///
+>     primstoredist_d     ///
+>     healthycost         ///
+>     healthytime, robust
+
+Linear regression                               Number of obs     =      4,303
+                                                F(13, 4289)       =      57.69
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.1658
+                                                Root MSE          =     4241.9
+
+---------------------------------------------------------------------------------
+                |               Robust
+       calories |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+----------------+----------------------------------------------------------------
+      snapnowhh |  -159.8437   159.5294    -1.00   0.316     -472.604    152.9165
+         income |   .1131491    .020455     5.53   0.000     .0730467    .1532516
+          rural |   217.3651   155.1307     1.40   0.161    -86.77132    521.5015
+                |
+         region |
+             2  |   1022.144   200.0569     5.11   0.000     629.9286    1414.359
+             3  |   888.5883   185.8541     4.78   0.000     524.2181    1252.958
+             4  |   .7693854   194.0645     0.00   0.997    -379.6974    381.2362
+                |
+         hhsize |   1004.931   50.11422    20.05   0.000      906.681    1103.181
+ foodsufficient |   91.24191    91.8588     0.99   0.321    -88.84886    271.3327
+      liqassets |   .2315134   .4350206     0.53   0.595    -.6213519    1.084379
+      caraccess |  -.7799267   .1889938    -4.13   0.000    -1.150452   -.4094012
+primstoredist_d |  -.0600686   .2636766    -0.23   0.820    -.5770112    .4568741
+    healthycost |   2.799367   .3633674     7.70   0.000     2.086978    3.511755
+    healthytime |   2.624018   .6842518     3.83   0.000      1.28253    3.965505
+          _cons |   -179.113   296.7146    -0.60   0.546    -760.8272    402.6011
+---------------------------------------------------------------------------------
+
+. 
+. *--------------------------------------------------------------*
+. * 11. Other nutrition outcomes
+. *--------------------------------------------------------------*
+. 
+. reg sugar               ///
+>     snapnowhh           ///
+>     income              ///
+>     rural               ///
+>     i.region            ///
+>     hhsize              ///
+>     foodsufficient      ///
+>     liqassets           ///
+>     caraccess, robust
+
+Linear regression                               Number of obs     =      4,303
+                                                F(10, 4292)       =      48.55
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.1548
+                                                Root MSE          =      191.5
+
+--------------------------------------------------------------------------------
+               |               Robust
+         sugar |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+     snapnowhh |   1.126309   7.384647     0.15   0.879    -13.35142    15.60403
+        income |   .0024084   .0008261     2.92   0.004     .0007888     .004028
+         rural |   10.79525   6.983314     1.55   0.122    -2.895654    24.48616
+               |
+        region |
+            2  |     37.224   9.537223     3.90   0.000     18.52611    55.92189
+            3  |   20.50816   8.745524     2.34   0.019     3.362407     37.6539
+            4  |  -5.012262   9.289588    -0.54   0.590    -23.22466    13.20013
+               |
+        hhsize |   45.74039   2.379274    19.22   0.000     41.07579      50.405
+foodsufficient |   2.847778   4.236201     0.67   0.501    -5.457365    11.15292
+     liqassets |   .0111406   .0213832     0.52   0.602    -.0307814    .0530627
+     caraccess |  -.0291483   .0085891    -3.39   0.001    -.0459875   -.0123092
+         _cons |  -21.66089   13.62137    -1.59   0.112    -48.36582    5.044034
+--------------------------------------------------------------------------------
+
+. 
+. reg sodium              ///
+>     snapnowhh           ///
+>     income              ///
+>     rural               ///
+>     i.region            ///
+>     hhsize              ///
+>     foodsufficient      ///
+>     liqassets           ///
+>     caraccess, robust
+
+Linear regression                               Number of obs     =      4,303
+                                                F(10, 4292)       =      54.04
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.1511
+                                                Root MSE          =     7534.3
+
+--------------------------------------------------------------------------------
+               |               Robust
+        sodium |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+     snapnowhh |  -138.6498   294.7603    -0.47   0.638    -716.5324    439.2327
+        income |   .2183391   .0364481     5.99   0.000      .146882    .2897962
+         rural |   437.4336   276.8523     1.58   0.114      -105.34    980.2073
+               |
+        region |
+            2  |   1622.512   351.9137     4.61   0.000     932.5795    2312.445
+            3  |   1748.065   323.8702     5.40   0.000     1113.112    2383.017
+            4  |   71.63288   333.0532     0.22   0.830    -581.3235    724.5893
+               |
+        hhsize |    1652.08    87.1514    18.96   0.000     1481.218    1822.941
+foodsufficient |   171.8938   163.6545     1.05   0.294    -148.9536    492.7413
+     liqassets |   .5158527   .7428463     0.69   0.487      -.94051    1.972215
+     caraccess |  -1.425432   .3244711    -4.39   0.000    -2.061564   -.7893014
+         _cons |  -292.7511   511.1227    -0.57   0.567    -1294.816    709.3137
+--------------------------------------------------------------------------------
+
+. 
+. *--------------------------------------------------------------*
+. * 12. Propensity score model (logit)
+. *--------------------------------------------------------------*
+. 
+. logit snapnowhh         ///
+>     income              ///
+>     rural               ///
+>     i.region            ///
+>     hhsize              ///
+>     foodsufficient      ///
+>     liqassets           ///
+>     caraccess           ///
+>     primstoredist_d     ///
+>     healthycost         ///
+>     healthytime
+
+Iteration 0:   log likelihood = -2670.4118  
+Iteration 1:   log likelihood = -2191.2279  
+Iteration 2:   log likelihood = -2081.6811  
+Iteration 3:   log likelihood =  -2077.692  
+Iteration 4:   log likelihood = -2077.6804  
+Iteration 5:   log likelihood = -2077.6804  
+
+Logistic regression                             Number of obs     =      4,303
+                                                LR chi2(12)       =    1185.46
+                                                Prob > chi2       =     0.0000
+Log likelihood = -2077.6804                     Pseudo R2         =     0.2220
+
+---------------------------------------------------------------------------------
+      snapnowhh |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+----------------+----------------------------------------------------------------
+         income |  -.0005459   .0000255   -21.40   0.000    -.0005959   -.0004959
+          rural |  -.0302969   .0887128    -0.34   0.733    -.2041708    .1435771
+                |
+         region |
+             2  |  -.5320998    .126537    -4.21   0.000    -.7801078   -.2840919
+             3  |  -.1391725   .1157371    -1.20   0.229    -.3660131    .0876681
+             4  |  -.2614268   .1273514    -2.05   0.040    -.5110309   -.0118227
+                |
+         hhsize |   .4542132   .0247152    18.38   0.000     .4057723    .5026541
+ foodsufficient |   .1843884   .0514485     3.58   0.000     .0835511    .2852256
+      liqassets |   .0010942   .0003432     3.19   0.001     .0004215    .0017669
+      caraccess |   .0002717   .0001359     2.00   0.046     5.29e-06     .000538
+primstoredist_d |  -.0000432   .0001628    -0.27   0.791    -.0003622    .0002758
+    healthycost |  -.0056031   .0113319    -0.49   0.621    -.0278132     .016607
+    healthytime |  -.0010812   .0015664    -0.69   0.490    -.0041513    .0019888
+          _cons |  -.3738662   .1844304    -2.03   0.043    -.7353431   -.0123892
+---------------------------------------------------------------------------------
+
+. 
+. predict pscore, pr
+
+. 
+. *--------------------------------------------------------------*
+. * 13. Propensity score overlap — save figures
+. *--------------------------------------------------------------*
+. 
+. twoway                                                          ///
+>     (histogram pscore if snapnowhh == 1, percent width(.02))   ///
+>     (histogram pscore if snapnowhh == 0, percent width(.02)),  ///
+>     legend(label(1 "SNAP households")                          ///
+>            label(2 "Non-SNAP households"))                     ///
+>     title("Distribution of Propensity Scores")                 ///
+>     xtitle("Propensity score")                                 ///
+>     ytitle("Percent")
+
+. 
+. graph export "output\figures\fig1_pscore_histogram.png", replace width(1200)
+(file output\figures\fig1_pscore_histogram.png written in PNG format)
+
+. di ">> Saved: output\figures\fig1_pscore_histogram.png"
+>> Saved: output\figures\fig1_pscore_histogram.png
+
+. 
+. twoway                                                          ///
+>     (kdensity pscore if snapnowhh == 1, lwidth(medthick))      ///
+>     (kdensity pscore if snapnowhh == 0, lpattern(dash)),       ///
+>     legend(label(1 "SNAP households")                          ///
+>            label(2 "Non-SNAP households"))                     ///
+>     title("Propensity Score Overlap")                          ///
+>     xtitle("Propensity score")                                 ///
+>     ytitle("Density")
+
+. 
+. graph export "output\figures\fig2_pscore_overlap.png", replace width(1200)
+(file output\figures\fig2_pscore_overlap.png written in PNG format)
+
+. di ">> Saved: output\figures\fig2_pscore_overlap.png"
+>> Saved: output\figures\fig2_pscore_overlap.png
+
+. 
+. *--------------------------------------------------------------*
+. * 14. Nearest Neighbor Matching (ATT)
+. *--------------------------------------------------------------*
+. 
+. teffects nnmatch        ///
+>     (calories           ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess) ///
+>     (snapnowhh), atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : nearest-neighbor matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Distance metric: Mahalanobis                                  max =          3
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |   204.0978   245.0856     0.83   0.405     -276.261    684.4567
+------------------------------------------------------------------------------
+
+. 
+. teffects nnmatch        ///
+>     (calories_pc        ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess) ///
+>     (snapnowhh), atet
+
+Treatment-effects estimation                   Number of obs      =      4,302
+Estimator      : nearest-neighbor matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Distance metric: Mahalanobis                                  max =          3
+------------------------------------------------------------------------------
+             |              AI Robust
+ calories_pc |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |   -.486469    1.95771    -0.25   0.804    -4.323509    3.350571
+------------------------------------------------------------------------------
+
+. 
+. * Bias-adjusted
+. teffects nnmatch        ///
+>     (calories_pc        ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess) ///
+>     (snapnowhh),        ///
+>     atet                ///
+>     biasadj(income rural region hhsize)
+
+Treatment-effects estimation                   Number of obs      =      4,302
+Estimator      : nearest-neighbor matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Distance metric: Mahalanobis                                  max =          3
+------------------------------------------------------------------------------
+             |              AI Robust
+ calories_pc |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |    .330277   1.953595     0.17   0.866    -3.498699    4.159253
+------------------------------------------------------------------------------
+
+. 
+. *--------------------------------------------------------------*
+. * 15. Propensity Score Matching (main strategy)
+. *--------------------------------------------------------------*
+. 
+. teffects psmatch        ///
+>     (calories)          ///
+>     (snapnowhh          ///
+>         income          ///
+>         rural           ///
+>         region          ///
+>         hhsize          ///
+>         foodsufficient  ///
+>         liqassets       ///
+>         caraccess       ///
+>         primstoredist_d ///
+>         healthycost     ///
+>         healthytime),   ///
+>     atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          1
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -36.00727   250.9169    -0.14   0.886    -527.7953    455.7808
+------------------------------------------------------------------------------
+
+. 
+. teffects psmatch        ///
+>     (calories_pc)       ///
+>     (snapnowhh          ///
+>         income          ///
+>         rural           ///
+>         region          ///
+>         hhsize          ///
+>         foodsufficient  ///
+>         liqassets       ///
+>         caraccess       ///
+>         primstoredist_d ///
+>         healthycost     ///
+>         healthytime),   ///
+>     atet
+
+Treatment-effects estimation                   Number of obs      =      4,302
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          1
+------------------------------------------------------------------------------
+             |              AI Robust
+ calories_pc |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |   3.786564   2.252352     1.68   0.093    -.6279658    8.201093
+------------------------------------------------------------------------------
+
+. 
+. tebalance summarize
+note: refitting the model using the generate() option
+
+  Covariate balance summary
+                                                   Raw      Matched
+                          -----------------------------------------
+                          Number of obs =        4,302        2,684
+                          Treated obs   =        1,342        1,342
+                          Control obs   =        2,960        1,342
+                          -----------------------------------------
+
+  -----------------------------------------------------------------
+                  |Standardized differences          Variance ratio
+                  |        Raw     Matched           Raw    Matched
+  ----------------+------------------------------------------------
+           income |  -.7903654   -.1305572      .2717119   1.243444
+            rural |  -.0628617     .063372      .9342449   1.083019
+           region |   .1275672   -.0526121      .9539255   1.029408
+           hhsize |   .4211902   -.1270077      1.404768   .8350519
+   foodsufficient |   .4144818    -.154905      1.356148   .9070921
+        liqassets |   .0993364    -.075804      .4267653   2.583035
+        caraccess |   .1872414   -.0529762      1.783408   .8824122
+  primstoredist_d |  -.0082047   -.0033511      1.025389   1.011388
+      healthycost |  -.0328804   -.0389207      3142.437   2964.539
+      healthytime |  -.0046969   -.0411443      1.103005   4297.145
+  -----------------------------------------------------------------
+
+. 
+. *==============================================================*
+. * 16. IMPROVED COMMON SUPPORT — три стратегии
+. *     (вставляется между основным PSM и IPW)
+. *==============================================================*
+. 
+. * ── СТРАТЕГИЯ A: Trimming по common support ────────────────*
+. *
+. * Сохраняем полный датасет, чтобы вернуться к нему после trim
+. 
+. preserve
+
+. 
+.     * Границы pscore в каждой группе
+.     summ pscore if snapnowhh == 1
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      pscore |      1,342    .4919085     .205562   6.92e-06   .9922702
+
+.     local pmin_snap = r(min)
+
+.     local pmax_snap = r(max)
+
+. 
+.     summ pscore if snapnowhh == 0
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      pscore |      2,961    .2302799    .1906362   7.15e-07   .9719805
+
+.     local pmin_ctrl = r(min)
+
+.     local pmax_ctrl = r(max)
+
+. 
+.     * Пересечение = зона common support
+.     local cs_low  = max(`pmin_snap', `pmin_ctrl')
+
+.     local cs_high = min(`pmax_snap', `pmax_ctrl')
+
+. 
+.     di "Common support: [`cs_low', `cs_high']"
+Common support: [6.91950117471e-06, .9719805121421814]
+
+.     di "Observations before trim: " _N
+Observations before trim: 4303
+
+. 
+.     keep if pscore >= `cs_low' & pscore <= `cs_high'
+(33 observations deleted)
+
+. 
+.     di "Observations after trim:  " _N
+Observations after trim:  4270
+
+.     di "Dropped: " (4303 - _N)
+Dropped: 33
+
+. 
+.     * PSM на trimmed sample
+.     di ""
+
+
+.     di "--- PSM на trimmed sample (common support) ---"
+--- PSM на trimmed sample (common support) ---
+
+.     teffects psmatch         ///
+>         (calories)           ///
+>         (snapnowhh           ///
+>             income rural region hhsize ///
+>             foodsufficient liqassets caraccess ///
+>             primstoredist_d healthycost healthytime), ///
+>         atet
+
+Treatment-effects estimation                   Number of obs      =      4,270
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          1
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -335.4221   284.9283    -1.18   0.239    -893.8713     223.027
+------------------------------------------------------------------------------
+
+. 
+.     * Overlap после trim
+.     twoway                                                      ///
+>         (kdensity pscore if snapnowhh == 1, lwidth(medthick))   ///
+>         (kdensity pscore if snapnowhh == 0, lpattern(dash)),    ///
+>         legend(label(1 "SNAP") label(2 "Non-SNAP"))             ///
+>         title("Propensity Score Overlap — After Trimming")      ///
+>         xtitle("Propensity score") ytitle("Density")
+
+. 
+.     graph export "output\figures\fig4_pscore_trimmed.png", ///
+>         replace width(1200)
+(file output\figures\fig4_pscore_trimmed.png written in PNG format)
+
+.     di ">> Saved: output\figures\fig4_pscore_trimmed.png"
+>> Saved: output\figures\fig4_pscore_trimmed.png
+
+. 
+. restore   // возвращаемся к полному датасету
+
+. 
+. * ── СТРАТЕГИЯ B: Caliper Matching ─────────────────────────*
+. *
+. * Caliper = 0.2 × SD(pscore) — стандартное правило Rosenbaum & Rubin
+. 
+. summ pscore
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+      pscore |      4,303    .3118754    .2299356   7.15e-07   .9922702
+
+. local caliper = 0.2 * r(sd)
+
+. di ""
+
+
+. di "Caliper = " `caliper'
+Caliper = .04598712
+
+. di "--- PSM с caliper ---"
+--- PSM с caliper ---
+
+. 
+. teffects psmatch             ///
+>     (calories)               ///
+>     (snapnowhh               ///
+>         income rural region hhsize ///
+>         foodsufficient liqassets caraccess ///
+>         primstoredist_d healthycost healthytime), ///
+>     atet caliper(`caliper')
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          1
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -36.00727   250.9169    -0.14   0.886    -527.7953    455.7808
+------------------------------------------------------------------------------
+
+. 
+. tebalance summarize   // проверяем баланс после caliper
+note: refitting the model using the generate() option
+
+  Covariate balance summary
+                                                   Raw      Matched
+                          -----------------------------------------
+                          Number of obs =        4,303        2,684
+                          Treated obs   =        1,342        1,342
+                          Control obs   =        2,961        1,342
+                          -----------------------------------------
+
+  -----------------------------------------------------------------
+                  |Standardized differences          Variance ratio
+                  |        Raw     Matched           Raw    Matched
+  ----------------+------------------------------------------------
+           income |  -.7900557   -.1252978      .2717428   1.273977
+            rural |  -.0626536    .0796379      .9344409   1.107452
+           region |   .1274415   -.0735111      .9541975   1.047393
+           hhsize |   .4215295    -.130942      1.404639   .8568379
+   foodsufficient |    .413673   -.1362737      1.354344   .9079038
+        liqassets |   .0992889    .0193234      .4269064   .8138117
+        caraccess |   .1873233   -.0837019      1.783974   .8254692
+  primstoredist_d |  -.0082852   -.0483929      1.025716   1.209665
+      healthycost |  -.0328912   -.0379535      3141.778   2969.651
+      healthytime |   -.004703   -.0406026      1.103378   4450.106
+  -----------------------------------------------------------------
+
+. 
+. * ── СТРАТЕГИЯ C: PSM без проблемных переменных ────────────*
+. *
+. * healthytime и healthycost давали variance ratio > 3000 —
+. * исключаем их из pscore модели как robustness check
+. 
+. di ""
+
+
+. di "--- PSM без healthytime и healthycost (robustness) ---"
+--- PSM без healthytime и healthycost (robustness) ---
+
+. 
+. teffects psmatch             ///
+>     (calories)               ///
+>     (snapnowhh               ///
+>         income rural region hhsize ///
+>         foodsufficient liqassets caraccess), ///
+>     atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          4
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -420.2649   258.0206    -1.63   0.103     -925.976    85.44625
+------------------------------------------------------------------------------
+
+. 
+. tebalance summarize
+note: refitting the model using the generate() option
+
+  Covariate balance summary
+                                                   Raw      Matched
+                          -----------------------------------------
+                          Number of obs =        4,303        2,684
+                          Treated obs   =        1,342        1,342
+                          Control obs   =        2,961        1,342
+                          -----------------------------------------
+
+  -----------------------------------------------------------------
+                  |Standardized differences          Variance ratio
+                  |        Raw     Matched           Raw    Matched
+  ----------------+------------------------------------------------
+           income |  -.7900557    -.090602      .2717428   1.291879
+            rural |  -.0626536    .0741954      .9344409   1.099122
+           region |   .1274415     -.04269      .9541975   1.028464
+           hhsize |   .4215295   -.0926988      1.404639   .8910445
+   foodsufficient |    .413673     -.09652      1.354344   .9573363
+        liqassets |   .0992889    .0055972      .4269064   .9289828
+        caraccess |   .1873233   -.0417405      1.783974   .9051353
+  -----------------------------------------------------------------
+
+. 
+. * ── СРАВНИТЕЛЬНАЯ ТАБЛИЦА: все варианты PSM ───────────────*
+. 
+. eststo clear
+
+. 
+. * Базовый PSM (из секции 15)
+. eststo psm_base: teffects psmatch ///
+>     (calories)                    ///
+>     (snapnowhh income rural region hhsize ///
+>      foodsufficient liqassets caraccess   ///
+>      primstoredist_d healthycost healthytime), ///
+>     atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          1
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -36.00727   250.9169    -0.14   0.886    -527.7953    455.7808
+------------------------------------------------------------------------------
+
+. 
+. * PSM с caliper
+. eststo psm_caliper: teffects psmatch ///
+>     (calories)                       ///
+>     (snapnowhh income rural region hhsize ///
+>      foodsufficient liqassets caraccess   ///
+>      primstoredist_d healthycost healthytime), ///
+>     atet caliper(`caliper')
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          1
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -36.00727   250.9169    -0.14   0.886    -527.7953    455.7808
+------------------------------------------------------------------------------
+
+. 
+. * PSM без проблемных переменных
+. eststo psm_clean: teffects psmatch ///
+>     (calories)                     ///
+>     (snapnowhh income rural region hhsize ///
+>      foodsufficient liqassets caraccess), ///
+>     atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          4
+------------------------------------------------------------------------------
+             |              AI Robust
+    calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -420.2649   258.0206    -1.63   0.103     -925.976    85.44625
+------------------------------------------------------------------------------
+
+. 
+. esttab psm_base psm_caliper psm_clean, ///
+>     se star(* 0.10 ** 0.05 *** 0.01)   ///
+>     title("PSM Robustness: Common Support Improvements") ///
+>     mtitle("Base PSM" "With Caliper" "Clean Covariates")
+
+PSM Robustness: Common Support Improvements
+------------------------------------------------------------
+                      (1)             (2)             (3)   
+                 Base PSM    With Caliper    Clean Cova~s   
+------------------------------------------------------------
+ATET                                                        
+r1vs0.snap~h       -36.01          -36.01          -420.3   
+                  (250.9)         (250.9)         (258.0)   
+------------------------------------------------------------
+N                    4303            4303            4303   
+------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. esttab psm_base psm_caliper psm_clean ///
+>     using "output\tables\table2_psm_robustness.rtf", ///
+>     replace se star(* 0.10 ** 0.05 *** 0.01)         ///
+>     title("PSM Robustness: Common Support Improvements") ///
+>     mtitle("Base PSM" "With Caliper" "Clean Covariates")
+(output written to output\tables\table2_psm_robustness.rtf)
+
+. 
+. di ">> Saved: output\tables\table2_psm_robustness.rtf"
+>> Saved: output\tables\table2_psm_robustness.rtf
+
+. 
+. * ── COEFFICIENT PLOT: все варианты PSM ────────────────────*
+. 
+. coefplot                                                           ///
+>     (psm_base,    keep(ATET:r1vs0.snapnowhh) label(Base PSM))     ///
+>     (psm_caliper, keep(ATET:r1vs0.snapnowhh) label(Caliper PSM))  ///
+>     (psm_clean,   keep(ATET:r1vs0.snapnowhh) label(Clean PSM)),   ///
+>     vertical xlabel(, noticks) xtitle("")                          ///
+>     yline(0, lpattern(dash))                                       ///
+>     title("PSM Estimates: Robustness to Common Support")           ///
+>     ylabel(, grid) legend(position(6))
+
+. 
+. graph export "output\figures\fig5_psm_robustness.png", ///
+>     replace width(1200)
+(file output\figures\fig5_psm_robustness.png written in PNG format)
+
+. di ">> Saved: output\figures\fig5_psm_robustness.png"
+>> Saved: output\figures\fig5_psm_robustness.png
+
+. 
+. *--------------------------------------------------------------*
+. * 17. Inverse Probability Weighting (IPW)
+. *--------------------------------------------------------------*
+. 
+. * --- Raw outcomes ---
+. teffects ipw            ///
+>     (calories)          ///
+>     (snapnowhh          ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess), ///
+>     atet
+
+Iteration 0:   EE criterion =  3.966e-21  
+Iteration 1:   EE criterion =  5.438e-26  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : inverse-probability weights
+Outcome model  : weighted mean
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+      calories |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |  -190.4132   229.8437    -0.83   0.407    -640.8986    260.0722
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   5116.221   205.0254    24.95   0.000     4714.379    5518.063
+--------------------------------------------------------------------------------
+
+. 
+. teffects ipw            ///
+>     (calories_pc)       ///
+>     (snapnowhh          ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess), ///
+>     atet
+
+Iteration 0:   EE criterion =  3.944e-21  
+Iteration 1:   EE criterion =  9.933e-31  
+
+Treatment-effects estimation                    Number of obs     =      4,302
+Estimator      : inverse-probability weights
+Outcome model  : weighted mean
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+   calories_pc |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |   4.065335   2.115378     1.92   0.055    -.0807296    8.211399
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   68.65452   2.337101    29.38   0.000     64.07389    73.23516
+--------------------------------------------------------------------------------
+
+. 
+. * --- Winsorised outcomes ---
+. di "--- IPW on winsorised calories ---"
+--- IPW on winsorised calories ---
+
+. teffects ipw            ///
+>     (calories_w)        ///
+>     (snapnowhh          ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess), ///
+>     atet
+
+Iteration 0:   EE criterion =  3.966e-21  
+Iteration 1:   EE criterion =  8.353e-26  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : inverse-probability weights
+Outcome model  : weighted mean
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+    calories_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |  -200.6251   219.7125    -0.91   0.361    -631.2537    230.0035
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   5057.427   198.5961    25.47   0.000     4668.186    5446.669
+--------------------------------------------------------------------------------
+
+. 
+. di "--- IPW on winsorised calories per capita ---"
+--- IPW on winsorised calories per capita ---
+
+. teffects ipw            ///
+>     (calories_pc_w)     ///
+>     (snapnowhh          ///
+>         income rural region ///
+>         hhsize foodsufficient ///
+>         liqassets caraccess), ///
+>     atet
+
+Iteration 0:   EE criterion =  3.944e-21  
+Iteration 1:   EE criterion =  2.296e-29  
+
+Treatment-effects estimation                    Number of obs     =      4,302
+Estimator      : inverse-probability weights
+Outcome model  : weighted mean
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+ calories_pc_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |   4.279151   2.063559     2.07   0.038     .2346485    8.323653
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   68.19869   2.293704    29.73   0.000     63.70312    72.69427
+--------------------------------------------------------------------------------
+
+. 
+. *--------------------------------------------------------------*
+. * 17b. Doubly-Robust IPWRA
+. *      Combines outcome regression + IPW weighting.
+. *      Consistent if EITHER the outcome model OR the propensity
+. *      score model is correctly specified — more robust than
+. *      either alone.
+. *--------------------------------------------------------------*
+. 
+. di ""
+
+
+. di "============================================================"
+============================================================
+
+. di "  DOUBLY-ROBUST IPWRA"
+  DOUBLY-ROBUST IPWRA
+
+. di "============================================================"
+============================================================
+
+. 
+. * Main outcome: calories per capita (winsorised) — primary result
+. di "--- IPWRA: calories_pc_w (PRIMARY OUTCOME) ---"
+--- IPWRA: calories_pc_w (PRIMARY OUTCOME) ---
+
+. teffects ipwra                                     ///
+>     (calories_pc_w                                 ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess)        ///
+>     (snapnowhh                                     ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess),       ///
+>     atet
+
+Iteration 0:   EE criterion =  3.894e-21  
+Iteration 1:   EE criterion =  1.180e-28  
+
+Treatment-effects estimation                    Number of obs     =      4,302
+Estimator      : IPW regression adjustment
+Outcome model  : linear
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+ calories_pc_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |  -3.818614   1.590659    -2.40   0.016    -6.936249    -.700979
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   76.29646   1.636058    46.63   0.000     73.08984    79.50307
+--------------------------------------------------------------------------------
+
+. 
+. * Secondary outcome: total calories (winsorised)
+. di "--- IPWRA: calories_w (secondary) ---"
+--- IPWRA: calories_w (secondary) ---
+
+. teffects ipwra                                     ///
+>     (calories_w                                    ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess)        ///
+>     (snapnowhh                                     ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess),       ///
+>     atet
+
+Iteration 0:   EE criterion =  5.990e-21  
+Iteration 1:   EE criterion =  3.015e-25  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : IPW regression adjustment
+Outcome model  : linear
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+    calories_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |    225.172   175.8506     1.28   0.200    -119.4888    569.8329
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |    4631.63   139.9753    33.09   0.000     4357.284    4905.977
+--------------------------------------------------------------------------------
+
+. 
+. * Sugar (winsorised)
+. di "--- IPWRA: sugar_w ---"
+--- IPWRA: sugar_w ---
+
+. teffects ipwra                                     ///
+>     (sugar_w                                       ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess)        ///
+>     (snapnowhh                                     ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess),       ///
+>     atet
+
+Iteration 0:   EE criterion =  3.882e-21  
+Iteration 1:   EE criterion =  8.867e-29  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : IPW regression adjustment
+Outcome model  : linear
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+       sugar_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |   12.97782   8.028408     1.62   0.106    -2.757567    28.71322
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |    177.477   6.293085    28.20   0.000     165.1427    189.8112
+--------------------------------------------------------------------------------
+
+. 
+. * Sodium (winsorised)
+. di "--- IPWRA: sodium_w ---"
+--- IPWRA: sodium_w ---
+
+. teffects ipwra                                     ///
+>     (sodium_w                                      ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess)        ///
+>     (snapnowhh                                     ///
+>         income rural i.region hhsize               ///
+>         foodsufficient liqassets caraccess),       ///
+>     atet
+
+Iteration 0:   EE criterion =  7.373e-21  
+Iteration 1:   EE criterion =  5.582e-25  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : IPW regression adjustment
+Outcome model  : linear
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+      sodium_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |    418.794   309.2049     1.35   0.176    -187.2364    1024.824
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   8020.704    242.437    33.08   0.000     7545.536    8495.872
+--------------------------------------------------------------------------------
+
+. 
+. *--------------------------------------------------------------*
+. * 18. MAIN COMPARISON TABLE
+. *     Primary outcome: calories_pc_w (per capita, winsorised)
+. *     Secondary: calories_w (total, winsorised)
+. *--------------------------------------------------------------*
+. 
+. eststo clear
+
+. 
+. * --- PRIMARY outcome: calories per capita (winsorised) ---
+. 
+. eststo ols_pc: reg calories_pc_w               ///
+>     snapnowhh income rural i.region            ///
+>     hhsize foodsufficient liqassets caraccess  ///
+>     primstoredist_d healthycost healthytime, robust
+
+Linear regression                               Number of obs     =      4,302
+                                                F(13, 4288)       =     862.11
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.5104
+                                                Root MSE          =      40.77
+
+---------------------------------------------------------------------------------
+                |               Robust
+  calories_pc_w |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+----------------+----------------------------------------------------------------
+      snapnowhh |  -1.835837    1.48018    -1.24   0.215    -4.737756    1.066081
+         income |  -.0015032   .0001589    -9.46   0.000    -.0018146   -.0011917
+          rural |  -.1481095   1.451205    -0.10   0.919    -2.993221    2.697002
+                |
+         region |
+             2  |    7.41347    2.06329     3.59   0.000     3.368354    11.45859
+             3  |   3.527381   1.916488     1.84   0.066    -.2299284     7.28469
+             4  |   .4050992    1.93061     0.21   0.834    -3.379895    4.190093
+                |
+         hhsize |  -22.98263   .5485931   -41.89   0.000    -24.05815    -21.9071
+ foodsufficient |   2.645682   .9893242     2.67   0.008     .7060947    4.585269
+      liqassets |  -.0036962   .0052314    -0.71   0.480    -.0139524    .0065599
+      caraccess |   .0105831   .0031923     3.32   0.001     .0043244    .0168417
+primstoredist_d |  -.0025893    .002684    -0.96   0.335    -.0078513    .0026726
+    healthycost |  -.0661123   .0025878   -25.55   0.000    -.0711858   -.0610388
+    healthytime |   -.034034   .0335854    -1.01   0.311    -.0998787    .0318107
+          _cons |   159.8953   4.165129    38.39   0.000     151.7295    168.0611
+---------------------------------------------------------------------------------
+
+. 
+. eststo nn_pc: teffects nnmatch                 ///
+>     (calories_pc_w                             ///
+>         income rural region hhsize             ///
+>         foodsufficient liqassets caraccess)    ///
+>     (snapnowhh), atet
+
+Treatment-effects estimation                   Number of obs      =      4,302
+Estimator      : nearest-neighbor matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Distance metric: Mahalanobis                                  max =          3
+------------------------------------------------------------------------------
+             |              AI Robust
+calories_p~w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -.2095368   1.759486    -0.12   0.905    -3.658067    3.238993
+------------------------------------------------------------------------------
+
+. 
+. eststo psm_pc: teffects psmatch                ///
+>     (calories_pc_w)                            ///
+>     (snapnowhh income rural region hhsize      ///
+>      foodsufficient liqassets caraccess), atet
+
+Treatment-effects estimation                   Number of obs      =      4,302
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          3
+------------------------------------------------------------------------------
+             |              AI Robust
+calories_p~w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |   3.354917   2.057136     1.63   0.103    -.6769945    7.386829
+------------------------------------------------------------------------------
+
+. 
+. eststo ipw_pc: teffects ipw                    ///
+>     (calories_pc_w)                            ///
+>     (snapnowhh income rural region hhsize      ///
+>      foodsufficient liqassets caraccess), atet
+
+Iteration 0:   EE criterion =  3.944e-21  
+Iteration 1:   EE criterion =  2.296e-29  
+
+Treatment-effects estimation                    Number of obs     =      4,302
+Estimator      : inverse-probability weights
+Outcome model  : weighted mean
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+ calories_pc_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |   4.279151   2.063559     2.07   0.038     .2346485    8.323653
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   68.19869   2.293704    29.73   0.000     63.70312    72.69427
+--------------------------------------------------------------------------------
+
+. 
+. eststo ipwra_pc: teffects ipwra                ///
+>     (calories_pc_w                             ///
+>         income rural i.region hhsize           ///
+>         foodsufficient liqassets caraccess)    ///
+>     (snapnowhh income rural i.region hhsize    ///
+>      foodsufficient liqassets caraccess), atet
+
+Iteration 0:   EE criterion =  3.894e-21  
+Iteration 1:   EE criterion =  1.180e-28  
+
+Treatment-effects estimation                    Number of obs     =      4,302
+Estimator      : IPW regression adjustment
+Outcome model  : linear
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+ calories_pc_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |  -3.818614   1.590659    -2.40   0.016    -6.936249    -.700979
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   76.29646   1.636058    46.63   0.000     73.08984    79.50307
+--------------------------------------------------------------------------------
+
+. 
+. di "=== PRIMARY TABLE: Calories per capita (winsorised) ==="
+=== PRIMARY TABLE: Calories per capita (winsorised) ===
+
+. esttab ols_pc nn_pc psm_pc ipw_pc ipwra_pc,   ///
+>     se star(* 0.10 ** 0.05 *** 0.01)           ///
+>     label                                      ///
+>     title("Effect of SNAP on Calories Per Capita (Winsorised)") ///
+>     mtitle("OLS" "NN" "PSM" "IPW" "IPWRA")
+
+Effect of SNAP on Calories Per Capita (Winsorised)
+----------------------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)             (5)   
+                              OLS              NN             PSM             IPW           IPWRA   
+----------------------------------------------------------------------------------------------------
+main                                                                                                
+anyone in househol~g       -1.836                                                                   
+                          (1.480)                                                                   
+
+household average ~o     -0.00150***                                                                
+                       (0.000159)                                                                   
+
+fara: rural tract          -0.148                                                                   
+                          (1.451)                                                                   
+
+census region=1                 0                                                                   
+                              (.)                                                                   
+
+census region=2             7.413***                                                                
+                          (2.063)                                                                   
+
+census region=3             3.527*                                                                  
+                          (1.916)                                                                   
+
+census region=4             0.405                                                                   
+                          (1.931)                                                                   
+
+number of people a~e       -22.98***                                                                
+                          (0.549)                                                                   
+
+respondent descrip~s        2.646***                                                                
+                          (0.989)                                                                   
+
+indicator of house~o     -0.00370                                                                   
+                        (0.00523)                                                                   
+
+household has acce~h       0.0106***                                                                
+                        (0.00319)                                                                   
+
+driving distance, ~w     -0.00259                                                                   
+                        (0.00268)                                                                   
+
+it costs too much ~y      -0.0661***                                                                
+                        (0.00259)                                                                   
+
+respondent is too ~t      -0.0340                                                                   
+                         (0.0336)                                                                   
+
+r1vs0.anyone in ho~g                       -0.210           3.355           4.279**        -3.819** 
+                                          (1.759)         (2.057)         (2.064)         (1.591)   
+
+Constant                    159.9***                                                                
+                          (4.165)                                                                   
+----------------------------------------------------------------------------------------------------
+POmean                                                                                              
+anyone in househol~g                                                        68.20***        76.30***
+                                                                          (2.294)         (1.636)   
+----------------------------------------------------------------------------------------------------
+TME1                                                                                                
+household average ~o                                                    -0.000547***    -0.000546***
+                                                                      (0.0000399)     (0.0000402)   
+
+fara: rural tract                                                         -0.0289         -0.0343   
+                                                                         (0.0831)        (0.0848)   
+
+census region                                                            -0.00867                   
+                                                                         (0.0391)                   
+
+number of people a~e                                                        0.455***        0.453***
+                                                                         (0.0273)        (0.0271)   
+
+respondent descrip~s                                                        0.185***        0.184***
+                                                                         (0.0514)        (0.0515)   
+
+indicator of house~o                                                      0.00103***      0.00107***
+                                                                       (0.000334)      (0.000333)   
+
+household has acce~h                                                     0.000279**      0.000268*  
+                                                                       (0.000137)      (0.000139)   
+
+census region=1                                                                                 0   
+                                                                                              (.)   
+
+census region=2                                                                            -0.529***
+                                                                                          (0.123)   
+
+census region=3                                                                            -0.137   
+                                                                                          (0.113)   
+
+census region=4                                                                            -0.263** 
+                                                                                          (0.125)   
+
+Constant                                                                   -0.579***       -0.370*  
+                                                                          (0.198)         (0.192)   
+----------------------------------------------------------------------------------------------------
+OME0                                                                                                
+household average ~o                                                                     -0.00207   
+                                                                                        (0.00137)   
+
+fara: rural tract                                                                          -1.544   
+                                                                                          (2.353)   
+
+census region=1                                                                                 0   
+                                                                                              (.)   
+
+census region=2                                                                             16.26***
+                                                                                          (6.047)   
+
+census region=3                                                                             3.074   
+                                                                                          (3.674)   
+
+census region=4                                                                             1.227   
+                                                                                          (4.798)   
+
+number of people a~e                                                                       -14.41***
+                                                                                          (1.978)   
+
+respondent descrip~s                                                                       -0.166   
+                                                                                          (1.634)   
+
+indicator of house~o                                                                    -0.000369   
+                                                                                        (0.00690)   
+
+household has acce~h                                                                      0.00247   
+                                                                                        (0.00444)   
+
+Constant                                                                                    129.7***
+                                                                                          (7.957)   
+----------------------------------------------------------------------------------------------------
+OME1                                                                                                
+household average ~o                                                                    -0.000366   
+                                                                                       (0.000394)   
+
+fara: rural tract                                                                           0.793   
+                                                                                          (2.556)   
+
+census region=1                                                                                 0   
+                                                                                              (.)   
+
+census region=2                                                                             9.317** 
+                                                                                          (4.171)   
+
+census region=3                                                                             1.050   
+                                                                                          (3.498)   
+
+census region=4                                                                            -2.961   
+                                                                                          (3.488)   
+
+number of people a~e                                                                       -20.47***
+                                                                                          (0.807)   
+
+respondent descrip~s                                                                        3.926** 
+                                                                                          (1.526)   
+
+indicator of house~o                                                                      -0.0211** 
+                                                                                        (0.00957)   
+
+household has acce~h                                                                       0.0155***
+                                                                                        (0.00470)   
+
+Constant                                                                                    150.1***
+                                                                                          (6.806)   
+----------------------------------------------------------------------------------------------------
+Observations                 4302            4302            4302            4302            4302   
+----------------------------------------------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. esttab ols_pc nn_pc psm_pc ipw_pc ipwra_pc    ///
+>     using "output\tables\table_primary.rtf",  ///
+>     replace se star(* 0.10 ** 0.05 *** 0.01)  ///
+>     label                                     ///
+>     title("Effect of SNAP on Calories Per Capita (Winsorised)") ///
+>     mtitle("OLS" "NN" "PSM" "IPW" "IPWRA")
+(output written to output\tables\table_primary.rtf)
+
+. 
+. di ">> Saved: output\tables\table_primary.rtf"
+>> Saved: output\tables\table_primary.rtf
+
+. 
+. *--------------------------------------------------------------*
+. * 18. Coefficient plot — PRIMARY outcome (all 5 estimators)
+. *     Must come BEFORE eststo clear for secondary outcome
+. *--------------------------------------------------------------*
+. 
+. coefplot                                                         ///
+>     (ols_pc,   keep(snapnowhh)            label(OLS))            ///
+>     (nn_pc,    keep(ATET:r1vs0.snapnowhh) label(NN))             ///
+>     (psm_pc,   keep(ATET:r1vs0.snapnowhh) label(PSM))            ///
+>     (ipw_pc,   keep(ATET:r1vs0.snapnowhh) label(IPW))            ///
+>     (ipwra_pc, keep(ATET:r1vs0.snapnowhh) label(IPWRA)),         ///
+>     vertical                                                     ///
+>     xlabel(none)                                                 ///
+>     xtitle("Estimator")                                          ///
+>     ytitle("ATT (kcal per capita)")                              ///
+>     yline(0, lcolor(red) lpattern(dash))                         ///
+>     title("Effect of SNAP on Calories Per Capita"                ///
+>           "(Winsorised, All Estimators)")                        ///
+>     ylabel(, grid) legend(position(6))                           ///
+>     note("Outcome: winsorised calories per capita."              ///
+>          "Bars = 95% CI. IPWRA = doubly-robust estimator.")
+
+. 
+. graph export "output\figures\fig3_coefplot.png", replace width(1400)
+(file output\figures\fig3_coefplot.png written in PNG format)
+
+. di ">> Saved: output\figures\fig3_coefplot.png"
+>> Saved: output\figures\fig3_coefplot.png
+
+. 
+. * --- SECONDARY outcome: total calories (winsorised) ---
+. 
+. eststo clear
+
+. 
+. eststo ols_tot: reg calories_w                 ///
+>     snapnowhh income rural i.region            ///
+>     hhsize foodsufficient liqassets caraccess  ///
+>     primstoredist_d healthycost healthytime, robust
+
+Linear regression                               Number of obs     =      4,303
+                                                F(13, 4289)       =      67.01
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.1712
+                                                Root MSE          =     4011.1
+
+---------------------------------------------------------------------------------
+                |               Robust
+     calories_w |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+----------------+----------------------------------------------------------------
+      snapnowhh |  -166.9943   150.2571    -1.11   0.266    -461.5761    127.5874
+         income |   .1109427   .0194537     5.70   0.000     .0728034    .1490819
+          rural |   200.3372   144.9957     1.38   0.167    -83.92924    484.6037
+                |
+         region |
+             2  |   1001.568   189.2356     5.29   0.000     630.5688    1372.568
+             3  |   866.5262   175.1607     4.95   0.000     523.1207    1209.932
+             4  |   51.46964   186.3323     0.28   0.782     -313.838    416.7773
+                |
+         hhsize |   966.9253    46.0315    21.01   0.000     876.6797    1057.171
+ foodsufficient |   91.51117   88.41765     1.03   0.301    -81.83315    264.8555
+      liqassets |   .1889036   .4309475     0.44   0.661    -.6559764    1.033784
+      caraccess |  -.7686227   .1847512    -4.16   0.000    -1.130831   -.4064148
+primstoredist_d |  -.0480895   .2429661    -0.20   0.843    -.5244286    .4282497
+    healthycost |   2.771178    .321732     8.61   0.000     2.140417    3.401939
+    healthytime |   2.607796   .6555059     3.98   0.000     1.322665    3.892926
+          _cons |  -86.70429   282.1773    -0.31   0.759    -639.9178    466.5092
+---------------------------------------------------------------------------------
+
+. 
+. eststo nn_tot: teffects nnmatch                ///
+>     (calories_w                                ///
+>         income rural region hhsize             ///
+>         foodsufficient liqassets caraccess)    ///
+>     (snapnowhh), atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : nearest-neighbor matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Distance metric: Mahalanobis                                  max =          3
+------------------------------------------------------------------------------
+             |              AI Robust
+  calories_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |   239.7448   225.8159     1.06   0.288    -202.8463    682.3358
+------------------------------------------------------------------------------
+
+. 
+. eststo psm_tot: teffects psmatch               ///
+>     (calories_w)                               ///
+>     (snapnowhh income rural region hhsize      ///
+>      foodsufficient liqassets caraccess), atet
+
+Treatment-effects estimation                   Number of obs      =      4,303
+Estimator      : propensity-score matching     Matches: requested =          1
+Outcome model  : matching                                     min =          1
+Treatment model: logit                                        max =          4
+------------------------------------------------------------------------------
+             |              AI Robust
+  calories_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+ATET         |
+   snapnowhh |
+   (1 vs 0)  |  -422.5341   245.8925    -1.72   0.086    -904.4745    59.40632
+------------------------------------------------------------------------------
+
+. 
+. eststo ipw_tot: teffects ipw                   ///
+>     (calories_w)                               ///
+>     (snapnowhh income rural region hhsize      ///
+>      foodsufficient liqassets caraccess), atet
+
+Iteration 0:   EE criterion =  3.966e-21  
+Iteration 1:   EE criterion =  8.353e-26  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : inverse-probability weights
+Outcome model  : weighted mean
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+    calories_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |  -200.6251   219.7125    -0.91   0.361    -631.2537    230.0035
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |   5057.427   198.5961    25.47   0.000     4668.186    5446.669
+--------------------------------------------------------------------------------
+
+. 
+. eststo ipwra_tot: teffects ipwra               ///
+>     (calories_w                                ///
+>         income rural i.region hhsize           ///
+>         foodsufficient liqassets caraccess)    ///
+>     (snapnowhh income rural i.region hhsize    ///
+>      foodsufficient liqassets caraccess), atet
+
+Iteration 0:   EE criterion =  5.990e-21  
+Iteration 1:   EE criterion =  3.015e-25  
+
+Treatment-effects estimation                    Number of obs     =      4,303
+Estimator      : IPW regression adjustment
+Outcome model  : linear
+Treatment model: logit
+--------------------------------------------------------------------------------
+               |               Robust
+    calories_w |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+ATET           |
+     snapnowhh |
+     (1 vs 0)  |    225.172   175.8506     1.28   0.200    -119.4888    569.8329
+---------------+----------------------------------------------------------------
+POmean         |
+     snapnowhh |
+            0  |    4631.63   139.9753    33.09   0.000     4357.284    4905.977
+--------------------------------------------------------------------------------
+
+. 
+. di "=== SECONDARY TABLE: Total calories (winsorised) ==="
+=== SECONDARY TABLE: Total calories (winsorised) ===
+
+. esttab ols_tot nn_tot psm_tot ipw_tot ipwra_tot, ///
+>     se star(* 0.10 ** 0.05 *** 0.01)              ///
+>     label                                         ///
+>     title("Effect of SNAP on Total Calories (Winsorised)") ///
+>     mtitle("OLS" "NN" "PSM" "IPW" "IPWRA")
+
+Effect of SNAP on Total Calories (Winsorised)
+----------------------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)             (5)   
+                              OLS              NN             PSM             IPW           IPWRA   
+----------------------------------------------------------------------------------------------------
+main                                                                                                
+anyone in househol~g       -167.0                                                                   
+                          (150.3)                                                                   
+
+household average ~o        0.111***                                                                
+                         (0.0195)                                                                   
+
+fara: rural tract           200.3                                                                   
+                          (145.0)                                                                   
+
+census region=1                 0                                                                   
+                              (.)                                                                   
+
+census region=2            1001.6***                                                                
+                          (189.2)                                                                   
+
+census region=3             866.5***                                                                
+                          (175.2)                                                                   
+
+census region=4             51.47                                                                   
+                          (186.3)                                                                   
+
+number of people a~e        966.9***                                                                
+                          (46.03)                                                                   
+
+respondent descrip~s        91.51                                                                   
+                          (88.42)                                                                   
+
+indicator of house~o        0.189                                                                   
+                          (0.431)                                                                   
+
+household has acce~h       -0.769***                                                                
+                          (0.185)                                                                   
+
+driving distance, ~w      -0.0481                                                                   
+                          (0.243)                                                                   
+
+it costs too much ~y        2.771***                                                                
+                          (0.322)                                                                   
+
+respondent is too ~t        2.608***                                                                
+                          (0.656)                                                                   
+
+r1vs0.anyone in ho~g                        239.7          -422.5*         -200.6           225.2   
+                                          (225.8)         (245.9)         (219.7)         (175.9)   
+
+Constant                   -86.70                                                                   
+                          (282.2)                                                                   
+----------------------------------------------------------------------------------------------------
+POmean                                                                                              
+anyone in househol~g                                                       5057.4***       4631.6***
+                                                                          (198.6)         (140.0)   
+----------------------------------------------------------------------------------------------------
+TME1                                                                                                
+household average ~o                                                    -0.000547***    -0.000546***
+                                                                      (0.0000399)     (0.0000402)   
+
+fara: rural tract                                                         -0.0282         -0.0333   
+                                                                         (0.0831)        (0.0848)   
+
+census region                                                            -0.00883                   
+                                                                         (0.0391)                   
+
+number of people a~e                                                        0.455***        0.453***
+                                                                         (0.0273)        (0.0271)   
+
+respondent descrip~s                                                        0.184***        0.183***
+                                                                         (0.0513)        (0.0515)   
+
+indicator of house~o                                                      0.00103***      0.00107***
+                                                                       (0.000334)      (0.000333)   
+
+household has acce~h                                                     0.000280**      0.000269*  
+                                                                       (0.000137)      (0.000139)   
+
+census region=1                                                                                 0   
+                                                                                              (.)   
+
+census region=2                                                                            -0.529***
+                                                                                          (0.123)   
+
+census region=3                                                                            -0.138   
+                                                                                          (0.113)   
+
+census region=4                                                                            -0.263** 
+                                                                                          (0.125)   
+
+Constant                                                                   -0.578***       -0.369*  
+                                                                          (0.198)         (0.192)   
+----------------------------------------------------------------------------------------------------
+OME0                                                                                                
+household average ~o                                                                        0.583***
+                                                                                          (0.128)   
+
+fara: rural tract                                                                           190.7   
+                                                                                          (332.0)   
+
+census region=1                                                                                 0   
+                                                                                              (.)   
+
+census region=2                                                                             516.2   
+                                                                                          (582.3)   
+
+census region=3                                                                            1138.0***
+                                                                                          (339.9)   
+
+census region=4                                                                             426.6   
+                                                                                          (446.0)   
+
+number of people a~e                                                                        557.2***
+                                                                                          (187.0)   
+
+respondent descrip~s                                                                        649.2***
+                                                                                          (172.0)   
+
+indicator of house~o                                                                       0.0752   
+                                                                                          (1.071)   
+
+household has acce~h                                                                       -0.717*  
+                                                                                          (0.381)   
+
+Constant                                                                                  -1121.9*  
+                                                                                          (661.7)   
+----------------------------------------------------------------------------------------------------
+OME1                                                                                                
+household average ~o                                                                        0.140** 
+                                                                                         (0.0712)   
+
+fara: rural tract                                                                           105.1   
+                                                                                          (282.8)   
+
+census region=1                                                                                 0   
+                                                                                              (.)   
+
+census region=2                                                                            1442.1***
+                                                                                          (378.6)   
+
+census region=3                                                                            1284.0***
+                                                                                          (318.2)   
+
+census region=4                                                                             354.3   
+                                                                                          (335.1)   
+
+number of people a~e                                                                        854.6***
+                                                                                          (74.51)   
+
+respondent descrip~s                                                                       -244.5*  
+                                                                                          (141.5)   
+
+indicator of house~o                                                                        2.694***
+                                                                                          (0.915)   
+
+household has acce~h                                                                       -0.872***
+                                                                                          (0.288)   
+
+Constant                                                                                    311.4   
+                                                                                          (485.0)   
+----------------------------------------------------------------------------------------------------
+Observations                 4303            4303            4303            4303            4303   
+----------------------------------------------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. esttab ols_tot nn_tot psm_tot ipw_tot ipwra_tot  ///
+>     using "output\tables\table_secondary.rtf",   ///
+>     replace se star(* 0.10 ** 0.05 *** 0.01)     ///
+>     label                                        ///
+>     title("Effect of SNAP on Total Calories (Winsorised)") ///
+>     mtitle("OLS" "NN" "PSM" "IPW" "IPWRA")
+(output written to output\tables\table_secondary.rtf)
+
+. 
+. di ">> Saved: output\tables\table_secondary.rtf"
+>> Saved: output\tables\table_secondary.rtf
+
+. 
+. *--------------------------------------------------------------*
+. * 19. Close log
+. *--------------------------------------------------------------*
+. 
+. di "========================================================"
+========================================================
+
+. di "  Log closed: $S_DATE $S_TIME"
+  Log closed:  2 May 2026 14:33:45
+
+. di "========================================================"
+========================================================
+
+. 
+. log close
+      name:  <unnamed>
+       log:  C:\Users\Admin\Desktop\advanced econometrics\project\output\logs\coding_2May2026.log
+  log type:  text
+ closed on:   2 May 2026, 14:33:45
+----------------------------------------------------------------------------------------------------------------------------------------------------------
